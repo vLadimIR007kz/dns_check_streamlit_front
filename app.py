@@ -33,10 +33,6 @@ def get_banned_categories(client_id):
     
     return categories
 
-# Функция для получения всех категорий
-def get_all_categories():
-    return [category['category'] for category in db.categories.find({}, {"category": 1})]
-
 # Функция для проверки существования IP-адреса
 def is_ip_exists(client_id, new_ip):
     existing_ips = db.client_list.find({"client_id": client_id}, {"client_ip": 1})
@@ -46,13 +42,24 @@ def is_ip_exists(client_id, new_ip):
 def add_ip_address(client_id, new_ip, password):
     db.client_list.insert_one({"client_id": client_id, "client_ip": new_ip, "password": password})
 
-# Функция для добавления категории в заблокированные
-def add_banned_category(client_id, category):
-    db.client_categories.insert_one({"client_id": client_id, "category": category})
+# Функция для добавления заблокированной категории
+def add_banned_category(client_id, selected_category):
+    banned_categories = get_banned_categories(client_id)
+    
+    # Проверяем, существует ли категория в заблокированных
+    if selected_category in banned_categories:
+        return False  # Категория уже забанена
+    
+    db.client_categories.insert_one({"client_id": client_id, "category": selected_category})
+    return True  # Успешно добавлено
 
-# Функция для удаления категории из заблокированных
-def remove_banned_category(client_id, category):
-    db.client_categories.delete_one({"client_id": client_id, "category": category})
+# Функция для удаления заблокированной категории
+def delete_banned_category(client_id, selected_category):
+    if selected_category == "malicious":
+        return False  # Нельзя удалить категорию malicious
+
+    db.client_categories.delete_one({"client_id": client_id, "category": selected_category})
+    return True  # Успешно удалено
 
 # Главная функция Streamlit
 def main():
@@ -169,29 +176,41 @@ def main():
                     st.session_state.requests = requests
                     st.session_state.client_ips = client_ips
 
+                    # Отладочная информация для проверки обновления
+                    st.write("Запросы после добавления нового IP:")
+                    st.write(requests)  # Отображаем запросы для проверки
+
             except ValueError:
                 st.error("Введите корректный IP-адрес.")
 
-        # Добавление новой категории к заблокированным
-        st.subheader("Добавить новую категорию к заблокированным")
-        all_categories = get_all_categories()  # Получаем все категории
-        selected_category = st.selectbox("Выберите категорию", all_categories)  # Combo box для выбора категории
+        # Добавление новой заблокированной категории
+        st.subheader("Добавить заблокированную категорию")
+        all_categories = list(db.categories.find({}, {"category": 1}))
+        categories_list = [category['category'] for category in all_categories]
+        
+        selected_category = st.selectbox("Выберите категорию", categories_list)
 
-        # Проверка нажатия кнопки "Добавить категорию"
         if st.button("Добавить категорию"):
-            add_banned_category(st.session_state.client_id, selected_category)
-            st.success(f"Категория '{selected_category}' добавлена к заблокированным.")
+            if add_banned_category(st.session_state.client_id, selected_category):
+                st.success("Категория добавлена успешно.")
+            else:
+                st.error("Эта категория уже заблокирована.")
 
-        # Удаление категории из заблокированных
-        st.subheader("Удалить категорию из заблокированных")
-        if banned_categories:  # Проверяем, есть ли заблокированные категории
+        # Удаление заблокированной категории
+        st.subheader("Удалить заблокированную категорию")
+        banned_categories = get_banned_categories(st.session_state.client_id)
+        banned_categories = [cat for cat in banned_categories if cat != "malicious"]  # Исключаем malicious
+
+        if banned_categories:
             selected_banned_category = st.selectbox("Выберите категорию для удаления", banned_categories)
-            # Проверка нажатия кнопки "Удалить категорию"
+
             if st.button("Удалить категорию"):
-                remove_banned_category(st.session_state.client_id, selected_banned_category)
-                st.success(f"Категория '{selected_banned_category}' удалена из заблокированных.")
+                if delete_banned_category(st.session_state.client_id, selected_banned_category):
+                    st.success("Категория удалена успешно.")
+                else:
+                    st.error("Нельзя удалить категорию 'malicious'.")
         else:
-            st.write("Нет категорий для удаления.")
+            st.write("Нет заблокированных категорий для удаления.")
 
 if __name__ == "__main__":
     main()
