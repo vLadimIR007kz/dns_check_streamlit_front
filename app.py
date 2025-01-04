@@ -141,6 +141,23 @@ def main():
             ax_ip_top.set_title(f"Топ-15 доменов для IP {client_ip}")
             st.pyplot(fig_ip_top)
 
+            # Топ-15 доменов для каждой категории для IP
+            st.subheader("Выбор категории для отображения топ-15 доменов")
+            all_categories = ip_requests['category'].unique()
+            selected_category = st.selectbox("Выберите категорию", all_categories)
+
+            category_requests = ip_requests[ip_requests['category'] == selected_category]
+            top_domains_category = category_requests['domain'].value_counts().head(15)
+
+            if not top_domains_category.empty:
+                fig_cat, ax_cat = plt.subplots()
+                ax_cat.barh(top_domains_category.index, top_domains_category.values)
+                ax_cat.set_xlabel("Количество запросов")
+                ax_cat.set_title(f"Топ-15 доменов для категории {selected_category} для IP {client_ip}")
+                st.pyplot(fig_cat)
+            else:
+                st.warning(f"Нет запросов для категории {selected_category} для IP {client_ip}.")
+
             # Список запросов для IP
             st.subheader("Список всех запросов")
             st.write(ip_requests[['domain', 'category', 'resolved_allowed']])
@@ -187,30 +204,24 @@ def main():
         st.subheader("Добавить заблокированную категорию")
         all_categories = list(db.categories.find({}, {"category": 1}))
         categories_list = [category['category'] for category in all_categories]
-        
         selected_category = st.selectbox("Выберите категорию", categories_list)
 
         if st.button("Добавить категорию"):
             if add_banned_category(st.session_state.client_id, selected_category):
-                st.success("Категория добавлена успешно.")
+                st.success("Категория успешно добавлена.")
             else:
-                st.error("Эта категория уже заблокирована.")
+                st.error("Категория уже забанена.")
 
         # Удаление заблокированной категории
         st.subheader("Удалить заблокированную категорию")
-        banned_categories = get_banned_categories(st.session_state.client_id)
-        banned_categories = [cat for cat in banned_categories if cat != "malicious"]  # Исключаем malicious
+        selected_category_for_deletion = st.selectbox("Выберите категорию для удаления", banned_categories)
 
-        if banned_categories:
-            selected_banned_category = st.selectbox("Выберите категорию для удаления", banned_categories)
+        if st.button("Удалить категорию"):
+            if delete_banned_category(st.session_state.client_id, selected_category_for_deletion):
+                st.success("Категория успешно удалена.")
+            else:
+                st.error("Нельзя удалить категорию 'malicious'.")
 
-            if st.button("Удалить категорию"):
-                if delete_banned_category(st.session_state.client_id, selected_banned_category):
-                    st.success("Категория удалена успешно.")
-                else:
-                    st.error("Нельзя удалить категорию 'malicious'.")
-        else:
-            st.write("Нет заблокированных категорий для удаления.")
-
+# Запуск приложения
 if __name__ == "__main__":
     main()
